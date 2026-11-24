@@ -211,7 +211,7 @@ static NotificationAppSettings* alloc_settings(void) {
 
     item = variable_item_list_add(
         app->variable_item_list,
-        "Smart Backlight",
+        "RPC Backlight",
         COUNT_OF(off_on_text),
         smart_backlight_changed,
         app);
