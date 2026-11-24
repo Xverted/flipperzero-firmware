@@ -147,6 +147,7 @@ static void rpc_system_gui_start_screen_stream_process(const PB_Main* request, v
     } else {
         if(rpc_session_get_owner(session) == RpcOwnerBle) {
             NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
+            notification_ble_screen_stream_changed(notification, true);
             if(notification->settings.smart_backlight) {
                 notification_message(notification, &sequence_display_backlight_off);
             }
@@ -173,32 +174,34 @@ static void rpc_system_gui_start_screen_stream_process(const PB_Main* request, v
     }
 }
 
+static void rpc_system_gui_stop_screen_stream(RpcGuiSystem* rpc_gui) {
+    if(!rpc_gui->is_streaming) return;
+    rpc_gui->is_streaming = false;
+
+    if(rpc_session_get_owner(rpc_gui->session) == RpcOwnerBle) {
+        NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
+        notification_ble_screen_stream_changed(notification, false);
+        furi_record_close(RECORD_NOTIFICATION);
+    }
+
+    gui_remove_framebuffer_callback(
+        rpc_gui->gui, rpc_system_gui_screen_stream_frame_callback, rpc_gui);
+    furi_thread_flags_set(furi_thread_get_id(rpc_gui->transmit_thread), RpcGuiWorkerFlagExit);
+    furi_thread_join(rpc_gui->transmit_thread);
+    furi_thread_free(rpc_gui->transmit_thread);
+    pb_release(&PB_Main_msg, rpc_gui->transmit_frame);
+    free(rpc_gui->transmit_frame);
+    rpc_gui->transmit_frame = NULL;
+}
+
 static void rpc_system_gui_stop_screen_stream_process(const PB_Main* request, void* context) {
     furi_assert(request);
     furi_assert(context);
 
     FURI_LOG_D(TAG, "StopScreenStream");
-
     RpcGuiSystem* rpc_gui = context;
-    RpcSession* session = rpc_gui->session;
-    furi_assert(session);
-
-    if(rpc_gui->is_streaming) {
-        rpc_gui->is_streaming = false;
-        // Remove GUI framebuffer callback
-        gui_remove_framebuffer_callback(
-            rpc_gui->gui, rpc_system_gui_screen_stream_frame_callback, context);
-        // Stop and release worker thread
-        furi_thread_flags_set(furi_thread_get_id(rpc_gui->transmit_thread), RpcGuiWorkerFlagExit);
-        furi_thread_join(rpc_gui->transmit_thread);
-        furi_thread_free(rpc_gui->transmit_thread);
-        // Release frame
-        pb_release(&PB_Main_msg, rpc_gui->transmit_frame);
-        free(rpc_gui->transmit_frame);
-        rpc_gui->transmit_frame = NULL;
-    }
-
-    rpc_send_and_release_empty(session, request->command_id, PB_CommandStatus_OK);
+    rpc_system_gui_stop_screen_stream(rpc_gui);
+    rpc_send_and_release_empty(rpc_gui->session, request->command_id, PB_CommandStatus_OK);
 }
 
 static uint8_t rpc_system_gui_input_source(RpcSession* session) {
@@ -485,20 +488,7 @@ void rpc_system_gui_free(void* context) {
         view_port_free(rpc_gui->rpc_session_active_viewport);
     }
 
-    if(rpc_gui->is_streaming) {
-        rpc_gui->is_streaming = false;
-        // Remove GUI framebuffer callback
-        gui_remove_framebuffer_callback(
-            rpc_gui->gui, rpc_system_gui_screen_stream_frame_callback, context);
-        // Stop and release worker thread
-        furi_thread_flags_set(furi_thread_get_id(rpc_gui->transmit_thread), RpcGuiWorkerFlagExit);
-        furi_thread_join(rpc_gui->transmit_thread);
-        furi_thread_free(rpc_gui->transmit_thread);
-        // Release frame
-        pb_release(&PB_Main_msg, rpc_gui->transmit_frame);
-        free(rpc_gui->transmit_frame);
-        rpc_gui->transmit_frame = NULL;
-    }
+    rpc_system_gui_stop_screen_stream(rpc_gui);
     furi_record_close(RECORD_INPUT_EVENTS);
     furi_record_close(RECORD_GUI);
     free(rpc_gui);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdatomic.h>
 #include <furi.h>
 #include <furi_hal.h>
 #include "notification.h"
@@ -14,6 +15,7 @@ typedef enum {
     InternalLayerMessage,
     SaveSettingsMessage,
     LoadSettingsMessage,
+    RefreshRgbMessage,
 } NotificationAppMessageType;
 
 typedef struct {
@@ -56,9 +58,11 @@ struct NotificationApp {
 
     NotificationLedLayer display;
     NotificationLedLayer led[NOTIFICATION_LED_COUNT];
+    atomic_uint ble_screen_streams;
     uint8_t display_led_lock;
 
     NotificationSettings settings;
 };
 
 void notification_message_save_settings(NotificationApp* app);
+void notification_ble_screen_stream_changed(NotificationApp* app, bool started);
