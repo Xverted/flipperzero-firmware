@@ -433,6 +433,11 @@ static void
     }
 }
 
+// Version 3 uses one of version 2's trailing padding bytes.
+_Static_assert(
+    sizeof(NotificationSettings) == 24 && offsetof(NotificationSettings, smart_backlight) == 22,
+    "Notification settings v2/v3 file layout");
+
 static bool notification_load_settings(NotificationApp* app) {
     NotificationSettings settings;
     File* file = storage_file_alloc(furi_record_open(RECORD_STORAGE));
@@ -451,6 +456,10 @@ static bool notification_load_settings(NotificationApp* app) {
     }
 
     if(fs_result) {
+        if(settings.version == 0x02) {
+            settings.smart_backlight = false;
+            settings.version = NOTIFICATION_SETTINGS_VERSION;
+        }
         if(settings.version != NOTIFICATION_SETTINGS_VERSION) {
             FURI_LOG_E(
                 TAG, "version(%d != %d) mismatch", settings.version, NOTIFICATION_SETTINGS_VERSION);
@@ -509,7 +518,7 @@ static void input_event_callback(const void* value, void* context) {
     furi_assert(context);
     NotificationApp* app = context;
     const InputEvent* event = value;
-    if(event->sequence_source != INPUT_SEQUENCE_SOURCE_BLE_RPC) {
+    if(event->sequence_source != INPUT_SEQUENCE_SOURCE_BLE_RPC || !app->settings.smart_backlight) {
         notification_message(app, &sequence_display_backlight_on);
     }
 }
@@ -525,6 +534,7 @@ static NotificationApp* notification_app_alloc(void) {
     app->settings.led_brightness = 1.0f;
     app->settings.display_off_delay_ms = 30000;
     app->settings.vibro_on = true;
+    app->settings.smart_backlight = false;
 
     app->display.value[LayerInternal] = 0x00;
     app->display.value[LayerNotification] = 0x00;

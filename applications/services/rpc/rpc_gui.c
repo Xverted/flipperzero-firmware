@@ -1,6 +1,6 @@
 #include "rpc_i.h"
 #include <gui/gui_i.h>
-#include <notification/notification_messages.h>
+#include <notification/notification_app.h>
 #include <assets_icons.h>
 
 #include <flipper.pb.h>
@@ -147,7 +147,9 @@ static void rpc_system_gui_start_screen_stream_process(const PB_Main* request, v
     } else {
         if(rpc_session_get_owner(session) == RpcOwnerBle) {
             NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-            notification_message(notification, &sequence_display_backlight_off);
+            if(notification->settings.smart_backlight) {
+                notification_message(notification, &sequence_display_backlight_off);
+            }
             furi_record_close(RECORD_NOTIFICATION);
         }
         rpc_send_and_release_empty(session, request->command_id, PB_CommandStatus_OK);
