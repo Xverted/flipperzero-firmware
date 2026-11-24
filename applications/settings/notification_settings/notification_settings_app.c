@@ -126,12 +126,20 @@ static void screen_changed(VariableItem* item) {
     notification_message(app->notification, &sequence_display_backlight_on);
 }
 
-static void smart_backlight_changed(VariableItem* item) {
+static void rpc_backlight_changed(VariableItem* item) {
     NotificationAppSettings* app = variable_item_get_context(item);
     uint8_t index = variable_item_get_current_value_index(item);
 
     variable_item_set_current_value_text(item, off_on_text[index]);
-    app->notification->settings.smart_backlight = index != 0;
+    app->notification->settings.smart_backlight = index == 0;
+}
+
+static void rpc_led_changed(VariableItem* item) {
+    NotificationAppSettings* app = variable_item_get_context(item);
+    uint8_t index = variable_item_get_current_value_index(item);
+
+    variable_item_set_current_value_text(item, off_on_text[index]);
+    notification_set_rpc_led(app->notification, index != 0);
 }
 
 const NotificationMessage apply_message = {
@@ -213,9 +221,15 @@ static NotificationAppSettings* alloc_settings(void) {
         app->variable_item_list,
         "RPC Backlight",
         COUNT_OF(off_on_text),
-        smart_backlight_changed,
+        rpc_backlight_changed,
         app);
-    value_index = app->notification->settings.smart_backlight;
+    value_index = !app->notification->settings.smart_backlight;
+    variable_item_set_current_value_index(item, value_index);
+    variable_item_set_current_value_text(item, off_on_text[value_index]);
+
+    item = variable_item_list_add(
+        app->variable_item_list, "RPC LED", COUNT_OF(off_on_text), rpc_led_changed, app);
+    value_index = atomic_load(&app->notification->settings.rpc_led);
     variable_item_set_current_value_index(item, value_index);
     variable_item_set_current_value_text(item, off_on_text[value_index]);
 

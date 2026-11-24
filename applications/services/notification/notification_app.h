@@ -37,7 +37,7 @@ typedef struct {
     Light light;
 } NotificationLedLayer;
 
-#define NOTIFICATION_SETTINGS_VERSION 0x03
+#define NOTIFICATION_SETTINGS_VERSION 0x04
 #define NOTIFICATION_SETTINGS_PATH    INT_PATH(NOTIFICATION_SETTINGS_FILE_NAME)
 
 typedef struct {
@@ -48,7 +48,8 @@ typedef struct {
     uint32_t display_off_delay_ms;
     int8_t contrast;
     bool vibro_on;
-    bool smart_backlight;
+    bool smart_backlight; // RC4 stored true for dark BLE input (RPC Backlight OFF in RC5).
+    atomic_bool rpc_led;
 } NotificationSettings;
 
 struct NotificationApp {
@@ -66,3 +67,4 @@ struct NotificationApp {
 
 void notification_message_save_settings(NotificationApp* app);
 void notification_ble_screen_stream_changed(NotificationApp* app, bool started);
+void notification_set_rpc_led(NotificationApp* app, bool enabled);

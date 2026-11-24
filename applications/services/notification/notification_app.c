@@ -46,6 +46,18 @@ void notification_message_save_settings(NotificationApp* app) {
     furi_event_flag_free(m.back_event);
 }
 
+static void notification_request_rgb_refresh(NotificationApp* app) {
+    NotificationAppMessage message = {.type = RefreshRgbMessage};
+    furi_check(furi_message_queue_put(app->queue, &message, FuriWaitForever) == FuriStatusOk);
+}
+
+void notification_set_rpc_led(NotificationApp* app, bool enabled) {
+    atomic_store(&app->settings.rpc_led, enabled);
+    if(atomic_load(&app->ble_screen_streams)) {
+        notification_request_rgb_refresh(app);
+    }
+}
+
 void notification_ble_screen_stream_changed(NotificationApp* app, bool started) {
     // A notification can be in a delay when the last stream disconnects.
     // Publish the new count before asking the service to refresh its background.
@@ -55,8 +67,7 @@ void notification_ble_screen_stream_changed(NotificationApp* app, bool started) 
         unsigned previous = atomic_fetch_sub(&app->ble_screen_streams, 1);
         furi_check(previous > 0);
     }
-    NotificationAppMessage message = {.type = RefreshRgbMessage};
-    furi_check(furi_message_queue_put(app->queue, &message, FuriWaitForever) == FuriStatusOk);
+    notification_request_rgb_refresh(app);
 }
 
 // internal layer
@@ -75,7 +86,7 @@ static void
 }
 
 static uint8_t notification_rgb_background(NotificationApp* app, size_t channel) {
-    uint8_t raw = atomic_load(&app->ble_screen_streams) ?
+    uint8_t raw = atomic_load(&app->ble_screen_streams) && atomic_load(&app->settings.rpc_led) ?
                       ble_stream_rgb[channel] :
                       app->led[channel].value_last[LayerInternal];
     return notification_settings_get_rgb_led_brightness(app, raw);
@@ -453,10 +464,11 @@ static void
     }
 }
 
-// Version 3 uses one of version 2's trailing padding bytes.
+// Versions 3 and 4 each use one of version 2's trailing padding bytes.
 _Static_assert(
-    sizeof(NotificationSettings) == 24 && offsetof(NotificationSettings, smart_backlight) == 22,
-    "Notification settings v2/v3 file layout");
+    sizeof(NotificationSettings) == 24 && offsetof(NotificationSettings, smart_backlight) == 22 &&
+        offsetof(NotificationSettings, rpc_led) == 23 && sizeof(atomic_bool) == 1,
+    "Notification settings v2/v3/v4 file layout");
 
 static bool notification_load_settings(NotificationApp* app) {
     NotificationSettings settings;
@@ -478,6 +490,10 @@ static bool notification_load_settings(NotificationApp* app) {
     if(fs_result) {
         if(settings.version == 0x02) {
             settings.smart_backlight = false;
+            settings.version = 0x03;
+        }
+        if(settings.version == 0x03) {
+            atomic_init(&settings.rpc_led, true);
             settings.version = NOTIFICATION_SETTINGS_VERSION;
         }
         if(settings.version != NOTIFICATION_SETTINGS_VERSION) {
@@ -556,6 +572,7 @@ static NotificationApp* notification_app_alloc(void) {
     app->settings.display_off_delay_ms = 30000;
     app->settings.vibro_on = true;
     app->settings.smart_backlight = false;
+    atomic_init(&app->settings.rpc_led, true);
 
     app->display.value[LayerInternal] = 0x00;
     app->display.value[LayerNotification] = 0x00;
