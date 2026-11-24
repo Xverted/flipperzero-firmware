@@ -1,5 +1,6 @@
 #include "rpc_i.h"
 #include <gui/gui_i.h>
+#include <notification/notification_messages.h>
 #include <assets_icons.h>
 
 #include <flipper.pb.h>
@@ -144,6 +145,11 @@ static void rpc_system_gui_start_screen_stream_process(const PB_Main* request, v
         rpc_send_and_release_empty(
             session, request->command_id, PB_CommandStatus_ERROR_VIRTUAL_DISPLAY_ALREADY_STARTED);
     } else {
+        if(rpc_session_get_owner(session) == RpcOwnerBle) {
+            NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
+            notification_message(notification, &sequence_display_backlight_off);
+            furi_record_close(RECORD_NOTIFICATION);
+        }
         rpc_send_and_release_empty(session, request->command_id, PB_CommandStatus_OK);
 
         rpc_gui->is_streaming = true;
@@ -193,6 +199,11 @@ static void rpc_system_gui_stop_screen_stream_process(const PB_Main* request, vo
     rpc_send_and_release_empty(session, request->command_id, PB_CommandStatus_OK);
 }
 
+static uint8_t rpc_system_gui_input_source(RpcSession* session) {
+    return rpc_session_get_owner(session) == RpcOwnerBle ? INPUT_SEQUENCE_SOURCE_BLE_RPC :
+                                                           INPUT_SEQUENCE_SOURCE_SOFTWARE;
+}
+
 static void
     rpc_system_gui_send_input_event_request_process(const PB_Main* request, void* context) {
     furi_assert(request);
@@ -215,12 +226,12 @@ static void
     }
 
     InputEvent event = {
+        .sequence_source = rpc_system_gui_input_source(session),
         .key = (int32_t)request->content.gui_send_input_event_request.key,
         .type = (int32_t)request->content.gui_send_input_event_request.type,
     };
 
     // Event sequence shenanigans
-    event.sequence_source = INPUT_SEQUENCE_SOURCE_SOFTWARE;
     if(event.type == InputTypePress) {
         rpc_gui->input_counter++;
         if(rpc_gui->input_counter == RPC_GUI_INPUT_RESET) rpc_gui->input_counter++;
@@ -452,7 +463,7 @@ void rpc_system_gui_free(void* context) {
             InputEvent event = {
                 .key = key,
                 .type = InputTypeRelease,
-                .sequence_source = INPUT_SEQUENCE_SOURCE_SOFTWARE,
+                .sequence_source = rpc_system_gui_input_source(rpc_gui->session),
                 .sequence_counter = rpc_gui->input_key_counter[key],
             };
             furi_pubsub_publish(rpc_gui->input_events, &event);

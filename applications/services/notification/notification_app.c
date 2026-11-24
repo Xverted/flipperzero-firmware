@@ -508,7 +508,10 @@ static void input_event_callback(const void* value, void* context) {
     furi_assert(value);
     furi_assert(context);
     NotificationApp* app = context;
-    notification_message(app, &sequence_display_backlight_on);
+    const InputEvent* event = value;
+    if(event->sequence_source != INPUT_SEQUENCE_SOURCE_BLE_RPC) {
+        notification_message(app, &sequence_display_backlight_on);
+    }
 }
 
 // App alloc
